@@ -1,2 +1,2 @@
-from .Fruit import *
+from .Target import *
 from .Utils import *

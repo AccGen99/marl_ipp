@@ -94,4 +94,4 @@ class cam_sensor:
                     utils_rew += 1
             self.all_obs.append([i, j, k])
 
-        return utility, utils_rew, observed_fruits, observed_obstacles, tree
+        return utility, utils_rew, observed_fruits, observed_obstacles

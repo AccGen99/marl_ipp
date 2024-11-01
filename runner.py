@@ -33,6 +33,10 @@ class Runner(object):
     def job(self, global_weights, episodeNumber, budget_range, sample_length):
         print("starting episode {} on metaAgent {}".format(episodeNumber, self.metaAgentID))
 
+        f = open('log.txt', 'a')
+        f.write('Episode {} started!\n'.format(episodeNumber))
+        f.close()
+
         # set the local weights to the global weight values from the master network
         self.set_weights(global_weights)
 

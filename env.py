@@ -30,9 +30,9 @@ class Env():
         self.num_agents = num_agents
 
         self.obs = Obstacle(self.num_builds, ENV_TYPE)
-        self.buildings = self.obs.get_buildings()      # Generate plants
-        self.fruit_plants = Target_info(self.buildings, ENV_TYPE)   # Generate fruits on plants
-        self.all_fruit_coords = self.fruit_plants.get_all_coords()      # Ground truth
+        self.buildings = self.obs.get_buildings()      # Generate buildings
+        self.target_builds = Target_info(self.buildings, ENV_TYPE) # Generate windows on buildings
+        self.all_target_coords = self.target_builds.get_all_coords()      # Ground truth
 
         self.k_size = k_size
         self.sensor = cam_sensor(depth=DEPTH, shift=0.5)
@@ -62,7 +62,7 @@ class Env():
         self.gt_occupancy_grid = self.obs.get_gt_occupancy_grid(self.all_target_coords, is_ground_truth=True)
         self.occupancy_grid = np.zeros((DIMS, DIMS, DIMS))
 
-        self.total_fruits = self.fruit_plants.num_targets
+        self.total_targets = self.target_builds.num_targets
         self.env_detected_targets = 0
 
         # initialize evaluations
@@ -122,11 +122,11 @@ class Env():
 
         sample = agent_obj.action_coords[next_node_index][0:3]
         grid_idx = self.obs.find_grid_idx(sample)
-        utility, utils_rew, observed_targets, obstacles, _ = self.sensor.get_utility(grid_idx, self.gt_occupancy_grid, facing)
+        utility, utils_rew, observed_targets, obstacles = self.sensor.get_utility(grid_idx, self.gt_occupancy_grid, facing)
 
         self.occupancy_grid = self.obs.get_gt_occupancy_grid(observed_targets, obstacles, prev_grid=self.occupancy_grid)
         utility = utility/self.utils_normalizer
-        self.detected_targets += utils_rew / self.total_fruits
+        self.detected_targets += utils_rew / self.total_targets
         obs_pt = np.array([sample[0], sample[1], sample[2], agent_obj.action_coords[int(next_node_index)][3]])
 
         self.env_gp.add_observed_point(obs_pt, utility)
@@ -213,7 +213,7 @@ class Env():
                     cov_trace = agent_obj.neibs_gp.evaluate_cov_trace(neib_high_info_area)
                     comms_reward = (agent_obj.prev_comms_trace - cov_trace) / agent_obj.prev_comms_trace
                     agent_obj.prev_comms_trace = cov_trace
-                    agent_obj.comms_reward = comms_reward
+                    agent_obj.comms_reward = 0.0 #comms_reward
 
         if save_image:
             self.visualize()
@@ -273,7 +273,7 @@ class Env():
                     cov_trace = agent_obj.neibs_gp.evaluate_cov_trace(neib_high_info_area)
                     comms_reward = (agent_obj.prev_comms_trace - cov_trace) / agent_obj.prev_comms_trace
                     agent_obj.prev_comms_trace = cov_trace
-                    agent_obj.comms_reward = comms_reward
+                    agent_obj.comms_reward = 0.0 #comms_reward
 
         for i in range(self.num_agents):
             agent_obj = self.agents[i]
@@ -294,10 +294,10 @@ class Env():
         ax = fig.add_subplot(121, projection='3d', label='Ground Truth')
         lw = 0.25
 
-        for each_plant in self.plants:
-            bl = each_plant.bottom_left
+        for each_build in self.buildings: #self.target_builds:
+            bl = each_build.bottom_left
             tr = [bl[0] + self.obs.width*l, bl[1] + self.obs.width*l]
-            h = each_plant.height
+            h = each_build.height
 
             ax.plot( [bl[0], bl[0]], [bl[1], bl[1]], [0.0, h], color='blue', linewidth=lw)
             ax.plot([bl[0] + self.obs.width*l, bl[0] + self.obs.width*l], [bl[1], bl[1]], [0.0, h], color='blue', linewidth=lw)
@@ -310,19 +310,19 @@ class Env():
         ax.plot([0.0, 0.0], [0.0, 0.0], [0.0, 1.0], c='k', marker=None, linestyle = '-', linewidth = 0.1)
 
         # Plotting fruits
-        fruit_x = []
-        fruit_y = []
-        fruit_z = []
-        for coord in self.all_fruit_coords:
-            fruit_x.append(coord[0])
-            fruit_y.append(coord[1])
-            fruit_z.append(coord[2])
-        ax.plot(fruit_x, fruit_y, fruit_z, '*', color='green')
+        target_x = []
+        target_y = []
+        target_z = []
+        for coord in self.all_target_coords:
+            target_x.append(coord[0])
+            target_y.append(coord[1])
+            target_z.append(coord[2])
+        ax.plot(target_x, target_y, target_z, '*', color='green')
 
         # ROBOT BELIEF PLOTTING
         ax1 = fig.add_subplot(122, projection='3d')
 
-        for coord in self.all_fruit_coords:
+        for coord in self.all_target_coords:
             coord = self.obs.find_grid_coord(self.obs.find_grid_idx(coord))
             ax1.plot(coord[0], coord[1], coord[2], '.', color='red')
 

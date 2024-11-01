@@ -19,7 +19,7 @@ class Target_info():
         for i in range(num_builds):
             build_poly = Polygon(self.builds[i].poly2D_coords)
             num = int(props[i]*self.num_targets)
-            while len(self.plants[i].target_coords) < num:
+            while len(self.builds[i].target_coords) < num:
                 c = np.random.rand(1,2)
                 target_coord = Point(c[0])
                 if target_coord.within(build_poly):

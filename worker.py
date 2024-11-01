@@ -47,7 +47,7 @@ class Worker:
         active_agent_ids = np.where(all_agents_functional == True)[0]
 
         for i in range(256):
-            all_agent_curr_coords = self.get_curr_coords(agents_list)
+            # all_agent_curr_coords = self.get_curr_coords(agents_list)
             p = Pool(processes=NUM_AGENTS)
             results = []
             for active_agent in active_agent_ids: # Execute only for agents who have budget > 0.0
@@ -63,13 +63,18 @@ class Worker:
                 updated_agent_obj, agent_id, action = res.get()
                 agents_list[agent_id] = updated_agent_obj
                 self.env.agents[agent_id] = copy.deepcopy(updated_agent_obj)
-                reward, done = env_copy_copy.step_sample(self.env.agents[agent_id], action, save_img=False) # Get marginalized rewards for each agent
+                reward, done = env_copy_copy.step_sample(self.env.agents[agent_id], action) # Get marginalized rewards for each agent
                 self.env.agents[agent_id].ipp_reward = reward
-                _ = self.env.step_sample(self.env.agents[agent_id], action, save_img=False) # Update the environment
+                _ = self.env.step_sample(self.env.agents[agent_id], action) # Update the environment
             p.close()
 
             self.sample_size = len(agent.action_coords)
             self.env.post_processing(self.save_image)
+
+            f = open('log.txt', 'a')
+            f.write('Episode {} stepped {}\n'.format(self.currEpisode, i))
+            f.close()
+            
             for agent in self.env.agents:
                 total_reward = agent.ipp_reward + agent.comms_reward
                 agent.experience[5] += torch.FloatTensor([[[total_reward]]]).to(self.device)
@@ -206,7 +211,7 @@ class Worker:
         return eigen_vector
     
     def make_gif(self, path, n):
-        with imageio.get_writer('{}/{}_det_{:.2f}.gif'.format(path, n, 100*self.env.detected_fruits), mode='I', duration=0.5) as writer:
+        with imageio.get_writer('{}/{}_det_{:.2f}.gif'.format(path, n, 100*self.env.detected_targets), mode='I', duration=0.5) as writer:
             for frame in self.env.frame_files:
                 image = imageio.imread(frame)
                 writer.append_data(image)

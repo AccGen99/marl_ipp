@@ -16,11 +16,11 @@ class Build:
         self.target_coords = []
 
 class Obstacle:
-    def __init__(self, test_name, max_height = 1.0, h_max_ratio = 0.99, dim = 50, width_cells = 3):
+    def __init__(self, num_builds, test_name, max_height = 1.0, h_max_ratio = 0.99, dim = 50, width_cells = 3):
         self.dim = dim
         self.width = width_cells
         self.max_height = max_height * h_max_ratio
-        self.num_builds = 5*5 #7*7
+        self.num_builds = num_builds #5*5 #7*7
         self.builds = []
 
         if test_name == 'random':
@@ -79,15 +79,15 @@ class Obstacle:
             obs_grid = prev_grid
 
         if is_ground_truth:
-            for plant in self.plants:
-                plant_poly = Polygon(plant.poly2D_coords)
-                height = plant.height
+            for build in self.builds:
+                build_poly = Polygon(build.poly2D_coords)
+                height = build.height
                 for i in range(self.dim):
                     for j in range(self.dim):
                         idx = [i, j, 0]
                         x, y, _ = self.find_grid_coord(idx)
                         pt = Point(x,y)
-                        if pt.within(plant_poly):
+                        if pt.within(build_poly):
                             _, _, k_max = self.find_grid_idx(np.array([x,y,height]))
                             for k in range(k_max):
                                 obs_grid[k][i][j] = 1
