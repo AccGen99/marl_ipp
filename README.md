@@ -25,10 +25,11 @@ We found the above works and open-sourced code to be extremely helpful towards d
 
 ## Setting up code
 
-* Define path for saving gifs and plots in env.py
-* Python == 3.7
-* Pytorch == 1.13
-* Ray == 2.7
+Set up the conda environment -
+
+```
+conda env create -f ipp_env.yml
+```
 
 ## Training
 
@@ -44,6 +45,17 @@ To specify the number of robots in the multi-robot system associated with each e
 To specify the test environment change the variable ```TEST_TYPE``` in [```test_parameters.py```](test_parameters.py) to one of ```random``` or ```grid```.
 
 You can change the range of target detection in sensor module by changing values of ```DEPTH``` parameter in [```parameters.py```](parameters.py). Note that the environment built in python considers an occupancy grid of 50 cells in each of 3 directions and the ```DEPTH``` variable specifies the depth of sensor frustum in terms of number of grid cells.
+
+## Inference
+
+Run the model for test -
+
+```
+python test_driver.py
+```
+To specify the size of the environment, change the variable ```ENV_SIZE``` in [```test_parameters.py```](parameters.py)
+
+To specify the number of robots in the multi-robot system associated with each environment instance, change the variable ```NUM_AGENTS``` in [```test_parameters.py```](parameters.py)
 
 ## Key Files
 
