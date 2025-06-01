@@ -25,10 +25,27 @@ We found the above works and open-sourced code to be extremely helpful towards d
 
 ## Setting up code
 
-Set up the conda environment -
+Make a new conda environment -
 
 ```
-conda env create -f ipp_env.yml
+conda create -n ipp python=3.9
+```
+
+Our approach is based on pytorch. Other than pytorch, please install the following packages -
+
+```
+ray
+imageio
+scipy
+matplotlib
+shapely
+scikit-learn
+```
+
+Activate the conda environment before training or inference -
+
+```
+conda activate ipp
 ```
 
 ## Training
