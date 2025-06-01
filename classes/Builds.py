@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+from itertools import product
 from shapely.geometry import Polygon, Point
 
 
@@ -16,11 +17,13 @@ class Build:
         self.target_coords = []
 
 class Obstacle:
-    def __init__(self, num_builds, test_name, max_height = 1.0, h_max_ratio = 0.99, dim = 50, width_cells = 3):
+    def __init__(self, test_name, num_agents, max_height = 1.0, h_max_ratio = 0.99, dim = 50, width_cells = 3):
+        self.num_agents = num_agents
         self.dim = dim
         self.width = width_cells
         self.max_height = max_height * h_max_ratio
-        self.num_builds = num_builds #5*5 #7*7
+
+        self.num_builds = int(5*5*dim / 50)
         self.builds = []
 
         if test_name == 'random':
@@ -41,9 +44,9 @@ class Obstacle:
         return self.distrib_3d
 
     def find_grid_coord(self, grid_val):
-        x_coord = (grid_val[0] + 0.5) * 1.0 / self.dim
-        y_coord = (grid_val[1] + 0.5) * 1.0 / self.dim
-        z_coord = (grid_val[2] + 0.5) * 1.0 / self.dim
+        x_coord = (grid_val[0]) * 1.0 / self.dim
+        y_coord = (grid_val[1]) * 1.0 / self.dim
+        z_coord = (grid_val[2]) * 1.0 / self.dim
 
         return np.array([x_coord, y_coord, z_coord])
 
@@ -55,16 +58,37 @@ class Obstacle:
         return np.array([x_coord, y_coord, z_coord])
 
     def find_grid_idx_pred(self, coords, grid_res):
-        index_x = math.floor(coords[0] * grid_res)# / self.max_height)
-        index_y = math.floor(coords[1] * grid_res)# / self.max_height)
-        index_z = math.floor(coords[2] * grid_res)# / self.max_height)
+        index_x = math.floor(coords[0] * grid_res)
+        index_y = math.floor(coords[1] * grid_res)
+        index_z = math.floor(coords[2] * grid_res)
         return index_x, index_y, index_z
 
     def find_grid_idx(self, coords):
-        index_x = math.floor(coords[0] * self.dim)# / self.max_height)
-        index_y = math.floor(coords[1] * self.dim)# / self.max_height)
-        index_z = math.floor(coords[2] * self.dim)# / self.max_height)
+        index_x = math.floor(coords[0] * self.dim)
+        index_y = math.floor(coords[1] * self.dim)
+        index_z = math.floor(coords[2] * self.dim)
         return index_x, index_y, index_z
+
+    def get_gt_occupancy_grid_scaled(self, target_coords, obstacles=[], prev_grid = None, is_ground_truth = False):
+        '''
+        Grid value legend
+        0 -> Free area
+        2 -> Target
+        '''
+        if prev_grid is None:
+            obs_grid = np.zeros((self.dim, self.dim, self.dim))
+        else:
+            obs_grid = prev_grid
+
+        if is_ground_truth:
+            for coord in target_coords:
+                x_idx, y_idx, z_idx = self.find_grid_idx(coord)
+                obs_grid[z_idx][x_idx][y_idx] = 2
+        else:
+            for x_idx, y_idx, z_idx in target_coords:
+                obs_grid[z_idx][x_idx][y_idx] = 2
+
+        return obs_grid
 
     def get_gt_occupancy_grid(self, target_coords, obstacles=[], prev_grid = None, is_ground_truth = False):
         '''
@@ -131,8 +155,8 @@ class Obstacle:
             self.builds.append(p_obj)
 
     def generate_grid(self):
-        row_x = np.array([0.1, 0.3, 0.5, 0.7, 0.9])
-        row_y = np.array([0.1, 0.3, 0.5, 0.7, 0.9])
+        row_x = np.linspace(0.05, 0.95, int(5.0*self.num_agents/3.0))
+        row_y = np.linspace(0.05, 0.95, int(5.0*self.num_agents/3.0))
 
         build_centers = []
         for i in range(len(row_x)):
@@ -143,7 +167,7 @@ class Obstacle:
 
         self.builds = []
 
-        for i in range(self.num_builds):
+        for i in range(len(build_centers)):
             p_obj = Build()
             p_obj.centre = build_centers[i]
             index_x = math.floor(p_obj.centre[0] * self.dim / self.max_height)

@@ -4,8 +4,9 @@ from shapely.geometry import Polygon, Point
 
 
 class Target_info():
-    def __init__(self, all_builds, test_name):
-        self.num_targets = np.random.randint(low=200, high=250)
+    def __init__(self, all_builds, test_name, num_agents, dim):
+        self.num_agents = num_agents
+        self.num_targets = float(250*((dim/50)**2)) # target density is kept same across all environments
         self.builds = all_builds
         self.generate_targets(test_name)
 
