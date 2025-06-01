@@ -1,3 +1,5 @@
+# sbatch -t 7-00:00:00 --nodes=1 --ntasks=1 --cpus-per-task=32 --gpus-per-node=1 -A bera89-k test
+
 INPUT_DIM = 8
 EMBEDDING_DIM = 128
 USE_GPU = False
@@ -5,19 +7,51 @@ USE_GPU_GLOBAL = True
 NUM_GPU = 1
 NUM_META_AGENT = 1
 GAMMA = 1
-FOLDER_NAME = 'run_1'
+FOLDER_NAME = 'our_approach'
 model_path = f'model/{FOLDER_NAME}'
 result_path = f'result/{FOLDER_NAME}'
-
 SEED = 1
-NUM_TEST = 25
+NUM_TEST = 1
 SAVE_IMG_GAP = 1
 
-BUDGET_RANGE = (9.99999, 10)
+ENV_SIZE = 50
+NUM_AGENTS = 3
+BUDGET_RANGE = (9.99999, 10.0)
+GEN_RANGE = [0.19, 0.21]
+COMMS_DIST = 1.732 # 1.732
+DEPTH = 12
+
+# ENV_SIZE = 75
+# NUM_AGENTS = 64 # 16, 32, 48, 64
+# BUD = 1.6667*NUM_AGENTS
+# BUDGET_RANGE = (BUD, BUD+0.0001)
+# GEN_RANGE = [0.19, 0.21]
+# COMMS_DIST = 0.2 # 
+# DEPTH = 12
+
+# ENV_SIZE = 100
+# CPU_BLOCK = 32
+# NUM_AGENTS = 64 # 16, 32, 48, 64
+# BUD = 1.6667*NUM_AGENTS
+# BUDGET_RANGE = (BUD, BUD+0.0001)
+# GEN_RANGE = [0.19, 0.21]
+# COMMS_DIST = 1.732 # 0.15 # 
+# DEPTH = 16
+
+# ENV_SIZE = 125
+# CPU_BLOCK = 32
+# NUM_AGENTS = 48 # 16, 32, 48, 64
+# BUD = 2.084*NUM_AGENTS
+# BUDGET_RANGE = (BUD, BUD+0.0001)
+# GEN_RANGE = [0.19, 0.21]
+# COMMS_DIST = 1.732 # 
+# DEPTH = 20
+
 K_SIZE = 20
-SAMPLE_LENGTH = 0.2
+SAMPLE_LENGTH = 0.1
 
 TEST_TYPE = 'random'
 FACING_ACTIONS = ['F', 'B', 'L', 'R']
 logs_path = f'result/{FOLDER_NAME}'
 csv_path = f'CSVs/{TEST_TYPE}'
+gifs_path = f'gifs/{FOLDER_NAME}/{ENV_SIZE}/{NUM_AGENTS}/'

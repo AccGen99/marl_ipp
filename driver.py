@@ -1,7 +1,6 @@
 import copy
 
 import torch
-import torch.nn.functional
 import torch.optim as optim
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
@@ -9,17 +8,16 @@ import ray
 import os
 import numpy as np
 import random
-from torch.cuda.amp.grad_scaler import GradScaler
-from torch.cuda.amp.autocast_mode import autocast
-
-import time
+from torch.amp.grad_scaler import GradScaler
+from torch.amp.autocast_mode import autocast
 
 from attention_net import AttentionNet
 from runner import RLRunner
 from parameters import *
 
+os.environ["RAY_DEDUP_LOGS"] = "0"
 ray.init()
-print("Welcome to Multi-Agent Target Mapping!")
+print("Welcome to Multi-Robot Informative Path Planning for Target Mapping!")
 
 # Make results dirs
 writer = SummaryWriter(train_path)
@@ -36,6 +34,7 @@ global_step = None
 
 
 
+# Helper function to log training metrics in tensorboard data format
 def writeToTensorBoard(writer, tensorboardData, curr_episode, plotMeans=True):
     # each row in tensorboardData represents an episode
     # each column is a specific metric
@@ -88,7 +87,7 @@ def main():
         print('best performance so far:', best_perf)
         print(global_optimizer.state_dict()['param_groups'][0]['lr'])
 
-    # launch meta agents
+    # launch meta agents (parallel training environments)
     meta_agents = [RLRunner.remote(i) for i in range(NUM_META_AGENT)]
 
     # get initial weigths
@@ -103,7 +102,7 @@ def main():
 
     jobList = []
     for i, meta_agent in enumerate(meta_agents):
-        jobList.append(meta_agent.job.remote(weights, curr_episode, BUDGET_RANGE, SAMPLE_LENGTH)) # Holds the env
+        jobList.append(meta_agent.job.remote(weights, curr_episode, BUDGET_RANGE)) # Holds the parallel environments
         curr_episode += 1
     metric_name = ['delta_cov_trace', 'detection_rate']
     trainingData = []
@@ -133,9 +132,9 @@ def main():
                     perf_metrics[n].append(metrics[n])
 
             eval_metric_name = 'detection_rate'
-            if np.mean(perf_metrics[eval_metric_name]) > best_perf and curr_episode % 64 == 0:
+            if np.mean(perf_metrics[eval_metric_name]) > best_perf and curr_episode % int(np.power(NUM_META_AGENT, 3)) ==0:
                 best_perf = np.mean(perf_metrics[eval_metric_name])
-                print('Saving best model with perf = {} for {}\n'.format(best_perf, eval_metric_name))
+                print('Saving best model with perf = {:.2f}\n'.format(best_perf))
                 checkpoint = {"model": global_network.state_dict(),
                               "optimizer": global_optimizer.state_dict(),
                               "episode": curr_episode,
@@ -146,7 +145,7 @@ def main():
                 print('Saved model', end='\n')
 
             update_done = False
-            while len(experience_buffer[0]) >= BATCH_SIZE:
+            while len(experience_buffer[0]) >= BATCH_SIZE: # If experience buffer is populated upto batch size data
                 rollouts = copy.deepcopy(experience_buffer)
                 for i in range(len(rollouts)):
                     rollouts[i] = rollouts[i][:BATCH_SIZE]
@@ -159,13 +158,13 @@ def main():
                     for i in range(14):
                         experience_buffer.append([])
 
-                node_inputs_batch = torch.stack(rollouts[0], dim=0) # (batch,sample_size+2,2)
-                edge_inputs_batch = torch.stack(rollouts[1], dim=0) # (batch,sample_size+2,k_size)
-                current_inputs_batch = torch.stack(rollouts[2], dim=0) # (batch,1,1)
-                action_batch = torch.stack(rollouts[3], dim=0) # (batch,1,1)
-                value_batch = torch.stack(rollouts[4], dim=0) # (batch,1,1)
-                reward_batch = torch.stack(rollouts[5], dim=0) # (batch,1,1)
-                value_prime_batch = torch.stack(rollouts[6], dim=0) # (batch,1,1)
+                node_inputs_batch = torch.stack(rollouts[0], dim=0)
+                edge_inputs_batch = torch.stack(rollouts[1], dim=0)
+                current_inputs_batch = torch.stack(rollouts[2], dim=0)
+                action_batch = torch.stack(rollouts[3], dim=0)
+                value_batch = torch.stack(rollouts[4], dim=0)
+                reward_batch = torch.stack(rollouts[5], dim=0)
+                value_prime_batch = torch.stack(rollouts[6], dim=0)
                 target_v_batch = torch.stack(rollouts[7])
                 budget_inputs_batch = torch.stack(rollouts[8], dim=0)
                 LSTM_h_batch = torch.stack(rollouts[9])
@@ -188,11 +187,11 @@ def main():
                     mask_batch = mask_batch.to(device)
                     pos_encoding_batch = pos_encoding_batch.to(device)
 
-                # PPO
+                # PPO - on-policy training
                 with torch.no_grad():
                     logp_list, value, _, _ = global_network(node_inputs_batch, edge_inputs_batch, budget_inputs_batch, current_inputs_batch, LSTM_h_batch, LSTM_c_batch, pos_encoding_batch, mask_batch)
-                old_logp = torch.gather(logp_list, 1 , action_batch.squeeze(1)).unsqueeze(1) # (batch_size,1,1)
-                advantage = (reward_batch + GAMMA*value_prime_batch - value_batch) # (batch_size, 1, 1)
+                old_logp = torch.gather(logp_list, 1 , action_batch.squeeze(1)).unsqueeze(1)
+                advantage = (reward_batch + GAMMA*value_prime_batch - value_batch)
 
                 entropy = -(logp_list*logp_list.exp()).sum(dim=-1).mean()
                 scaler = GradScaler()
@@ -203,7 +202,7 @@ def main():
                         logp = torch.gather(logp_list, 1, action_batch.squeeze(1)).unsqueeze(1)
                         ratios = torch.exp(logp-old_logp.detach())
                         surr1 = ratios * advantage.detach()
-                        surr2 = torch.clamp(ratios, 1-EPSILON, 1+EPSILON) * advantage.detach() # PARAM EPSILON 0 - smaller updates, 0.2 maybe larger updates
+                        surr2 = torch.clamp(ratios, 1-EPSILON, 1+EPSILON) * advantage.detach()
                         policy_loss = -torch.min(surr1, surr2)
                         policy_loss = policy_loss.mean()
 
@@ -225,16 +224,14 @@ def main():
                 perf_data = []
                 for n in metric_name:
                     perf_data.append(np.nanmean(perf_metrics[n]))
-                data = [reward_batch.mean().item(), value_batch.mean().item(), policy_loss.item(), value_loss.item(),
-                        entropy.item(), grad_norm.item(), target_v_batch.mean().item(), *perf_data]
-                
+                data = [reward_batch.mean().item(), value_batch.mean().item(), policy_loss.item(), value_loss.item(), entropy.item(), grad_norm.item(), target_v_batch.mean().item(), *perf_data]                
                 trainingData.append(data)
 
             if len(trainingData) >= SUMMARY_WINDOW:
                 writeToTensorBoard(writer, trainingData, curr_episode)
                 trainingData = []
 
-            # get the updated global weights
+            # Get the updated global weights for actor networks
             if update_done == True:
                 if device != local_device:
                     weights = global_network.to(local_device).state_dict()
@@ -242,12 +239,13 @@ def main():
                 else:
                     weights = global_network.state_dict()
             
+            # Launch next set of parallel environment instances
             jobList = []                                                                                    
             for i, meta_agent in enumerate(meta_agents):                                                    
-                jobList.append(meta_agent.job.remote(weights, curr_episode, BUDGET_RANGE, SAMPLE_LENGTH))
+                jobList.append(meta_agent.job.remote(weights, curr_episode, BUDGET_RANGE))
                 curr_episode += 1 
             
-            if curr_episode % 16 == 0:
+            if curr_episode % int(np.power(NUM_META_AGENT, 2)) == 0:
                 print('Saving model', end='\n')
                 checkpoint = {"model": global_network.state_dict(),
                               "optimizer": global_optimizer.state_dict(),

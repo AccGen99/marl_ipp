@@ -11,24 +11,23 @@ import time
 import scipy.signal as signal
 from multiprocessing import Pool
 
-from env import Env
+from test_env import Env
 from attention_net import AttentionNet
-from parameters import *
+from test_parameters import ENV_SIZE, NUM_AGENTS, EMBEDDING_DIM, INPUT_DIM, K_SIZE, FACING_ACTIONS
 
 def discount(x, gamma):
     return signal.lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
 
 class WorkerTest:
-    def __init__(self, metaAgentID, localNetwork, global_step, budget_range, sample_length, device='cuda', greedy=False, save_image=False, seed=None):
+    def __init__(self, metaAgentID, localNetwork, global_step, budget_range, device='cuda', greedy=False, save_image=False, seed=None):
         self.seed = seed
         self.device = device
         self.greedy = greedy
         self.metaAgentID = metaAgentID
         self.global_step = global_step
         self.save_image = save_image
-        self.sample_length = sample_length
 
-        self.env = Env(global_step, K_SIZE, NUM_AGENTS, sample_length, budget_range, self.save_image, self.seed)
+        self.env = Env(global_step, K_SIZE, NUM_AGENTS, budget_range, self.save_image, self.seed)
         self.local_net = localNetwork
 
     def run_episode(self, currEpisode):
@@ -47,56 +46,26 @@ class WorkerTest:
         active_agent_ids = np.where(all_agents_functional == True)[0]
 
         for i in range(256):
-            t1 = time.time()
-            p = Pool(processes=NUM_AGENTS)
-            results = []
-            for active_agent in active_agent_ids: # Execute only for agents who have budget > 0.0 and haven't collided
-                agent = agents_list[active_agent]
-                # One process per active agent
-                results.append(p.apply_async(self.plan_next_action, args=(agent,)))
-            p.close()
-            p.join()
+            remain_budget = 0.0
+            for active_agent in active_agent_ids:
+                next_action = self.plan_next_action(agents_list[active_agent])
+                _ = self.env.step_sample(agents_list[active_agent], next_action)
+                remain_budget += agents_list[active_agent].budget
 
-            t2 = time.time()
-
-            for res in results:
-                updated_agent_obj, agent_id, action = res.get()
-                agents_list[agent_id] = updated_agent_obj
-                self.env.agents[agent_id] = copy.deepcopy(updated_agent_obj)
-                _ = self.env.step_sample(self.env.agents[agent_id], action, save_img=False) # Update the environment
-            p.close()
-
-            self.sample_size = len(agent.action_coords)
             self.env.test_post_processing(self.save_image)
             self.env.step += 1
 
             all_agents_functional = np.array([agent_obj.functional for agent_obj in agents_list])
             active_agent_ids = np.where(all_agents_functional == True)[0]
 
-            self.env.budget = 0.0
-            for agent_id in active_agent_ids:
-                agent = agents_list[agent_id]
-                self.env.budget += agent.budget
+            print('{:.2f},{:.2f}'.format(remain_budget, 100*self.env.detected_targets))
 
-            f = open('ours_det.csv', 'a')
-            f.write('{},{}\n'.format(self.env.budget, 100*self.env.detected_fruits))
-            f.close()
-
-            f = open('ours_time.csv', 'a')
-            f.write('{}\n'.format(t2 - t1))
-            f.close()
-
-            if self.env.budget < 0.0 or len(active_agent_ids) == 0:
+            if remain_budget < 0.0 or len(active_agent_ids) == 0:
                 remain_budget = 0
                 for agent in agents_list:
                     remain_budget += agent.budget
 
-                perf_metrics['delta_cov_trace'] = self.env.cov_trace0 - self.env.cov_trace
                 perf_metrics['detection_rate'] = 100*self.env.detected_targets
-
-                f = open('ours_res.csv', 'a')
-                f.write('{},{}\n'.format(self.env.budget, 100*self.env.detected_targets))
-                f.close()
 
                 print('{} Goodbye world! We did it!'.format(i))
                 break
@@ -106,11 +75,6 @@ class WorkerTest:
         return perf_metrics, agents_list
 
     def plan_next_action(self, agent):
-        torch.manual_seed(int(time.time())+100*agent.ID)
-        agent.experience[9] += agent.LSTM_h
-        agent.experience[10] += agent.LSTM_c
-        agent.experience[11] += agent.mask
-
         n_nodes = agent.action_coords.shape[0]
         node_util_inputs = agent.node_utils.reshape((n_nodes, 1))
         node_std_inputs = agent.node_std.reshape((n_nodes,1))
@@ -136,32 +100,15 @@ class WorkerTest:
         with torch.no_grad():
             logp_list, value, agent.LSTM_h, agent.LSTM_c = agent.network(node_inputs, edge_inputs, budget_inputs, current_index, agent.LSTM_h, agent.LSTM_c, pos_encoding, agent.mask)
 
-        # print('Working 3')
         if self.greedy:
             action_index = torch.argmax(logp_list, dim=1).long()
         else:
             action_index = torch.multinomial(logp_list.exp(), 1).long().squeeze(1)
 
-        agent.value_list.append(value.squeeze(0).squeeze(0).item())
-
-        agent.experience[0] += node_inputs
-        agent.experience[1] += edge_inputs
-        agent.experience[2] += current_index
-        agent.experience[3] += action_index.unsqueeze(0).unsqueeze(0)
-        agent.experience[4] += value
-        agent.experience[8] += budget_inputs
-        agent.experience[12] += pos_encoding
-
         next_node_index = edge_inputs[:, current_index.item(), action_index.item()]
         agent.route.append(next_node_index.item())
         agent.mask = torch.zeros((1, self.sample_size, K_SIZE*len(FACING_ACTIONS)), dtype=torch.int64).to(self.device)
-        return agent, agent.ID, next_node_index.item()
-
-    def get_curr_coords(self, agents_list):
-        curr_coords = []
-        for agent in agents_list:
-            curr_coords.append(agent.curr_coord)
-        return np.array(curr_coords)
+        return next_node_index.item()
 
     def work(self, currEpisode, test):
         '''

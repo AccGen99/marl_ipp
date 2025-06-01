@@ -15,19 +15,22 @@ from env import Env
 from attention_net import AttentionNet
 from parameters import *
 
+os.environ["RAY_DEDUP_LOGS"] = "0"
+
+
+
 def discount(x, gamma):
     return signal.lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
 
 class Worker:
-    def __init__(self, metaAgentID, localNetwork, global_step, budget_range, sample_length, device='cuda', greedy=False, save_image=False):
+    def __init__(self, metaAgentID, localNetwork, global_step, budget_range, device='cuda', greedy=False, save_image=False):
         self.device = device
         self.greedy = greedy
         self.metaAgentID = metaAgentID
         self.global_step = global_step
         self.save_image = save_image
-        self.sample_length = sample_length
 
-        self.env = Env(global_step, K_SIZE, NUM_AGENTS, sample_length, budget_range, self.save_image)
+        self.env = Env(global_step, K_SIZE, NUM_AGENTS, budget_range, self.save_image)
         self.local_net = localNetwork
         self.experience = None
 
@@ -35,7 +38,7 @@ class Worker:
         perf_metrics = dict()
 
         agents_list = self.env.reset() # Spawn agents in env
-        self.sample_size = len(agents_list[0].action_coords)
+        self.sample_size = K_SIZE*len(FACING_ACTIONS) #len(agents_list[0].action_coords)
 
         for agent in agents_list: # Initialize the agent networks
             agent.network = copy.deepcopy(self.local_net)
@@ -47,7 +50,6 @@ class Worker:
         active_agent_ids = np.where(all_agents_functional == True)[0]
 
         for i in range(256):
-            # all_agent_curr_coords = self.get_curr_coords(agents_list)
             p = Pool(processes=NUM_AGENTS)
             results = []
             for active_agent in active_agent_ids: # Execute only for agents who have budget > 0.0
@@ -71,10 +73,6 @@ class Worker:
             self.sample_size = len(agent.action_coords)
             self.env.post_processing(self.save_image)
 
-            f = open('log.txt', 'a')
-            f.write('Episode {} stepped {}\n'.format(self.currEpisode, i))
-            f.close()
-            
             for agent in self.env.agents:
                 total_reward = agent.ipp_reward + agent.comms_reward
                 agent.experience[5] += torch.FloatTensor([[[total_reward]]]).to(self.device)
@@ -103,10 +101,6 @@ class Worker:
 
         print('Episode {} completed - {:.2f}%'.format(self.currEpisode, 100*self.env.detected_targets))
 
-        f = open(logs_path + '/train_log.txt', 'a')
-        f.write('Episode {} completed with perf {:.2f}!\n'.format(self.currEpisode, 100*self.env.detected_targets))
-        f.close()
-
         for agent in agents_list:
             reward = copy.deepcopy(agent.experience[5])
             reward.append(agent.experience[6][-1])
@@ -120,7 +114,13 @@ class Worker:
 
         # save gif
         if self.save_image:
-            path = gifs_path
+            path = 'gifs/{}/{}/'.format(FOLDER_NAME, DIMS)
+            if not os.path.exists(path):
+                os.mkdir(path)
+
+            path = path + '{}/'.format(NUM_AGENTS)
+            if not os.path.exists(path):
+                os.mkdir(path)
             self.make_gif(path, currEpisode)
 
         return perf_metrics, agents_list

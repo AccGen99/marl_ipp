@@ -235,7 +235,8 @@ class AttentionNet(nn.Module):
         super(AttentionNet, self).__init__()
         self.initial_embedding = nn.Linear(input_dim, embedding_dim) # layer for non-end position
         self.neib_embedding = nn.Linear(input_dim, embedding_dim) # embedding for closest agent position features
-        self.budget_embedding = nn.Linear(embedding_dim+2, embedding_dim)
+        # self.budget_embedding = nn.Linear(embedding_dim+2, embedding_dim)
+        self.budget_embedding = nn.Linear(embedding_dim+2+1, embedding_dim)
         self.value_output = nn.Linear(embedding_dim,1)
 
         self.pos_embedding = nn.Linear(32, embedding_dim)
@@ -269,7 +270,9 @@ class AttentionNet(nn.Module):
         embedding_dim = embedding_feature.size()[2]
 
         th = torch.FloatTensor([ADAPTIVE_TH]).unsqueeze(0).unsqueeze(0).repeat(batch_size, sample_size, 1).to(embedding_feature.device)
-        embedding_feature = self.budget_embedding(torch.cat((embedding_feature, budget_inputs, th), dim=-1)) # n_nodes X embed
+        th2 = torch.FloatTensor([COMMS_DIST]).unsqueeze(0).unsqueeze(0).repeat(batch_size, sample_size, 1).to(embedding_feature.device)
+        # embedding_feature = self.budget_embedding(torch.cat((embedding_feature, budget_inputs, th), dim=-1)) # n_nodes X embed
+        embedding_feature = self.budget_embedding(torch.cat((embedding_feature, budget_inputs, th, th2), dim=-1)) # n_nodes X embed
         connected_nodes_feature = torch.gather(embedding_feature, 1, current_edge.repeat(1, 1, embedding_dim))
         
         connected_nodes_budget = torch.gather(budget_inputs, 1, current_edge)
