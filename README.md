@@ -1,6 +1,6 @@
-# Multi-Robot Informative Path Planning for Efficient Target Mapping using Deep Reinforcement Learning
+# Scalable Multi-Robot Informative Path Planning for Target Mapping via Deep Reinforcement Learning
 
-This repository contains the code of our paper titled "Multi-Robot Informative Path Planning for Efficient Target Mapping using Deep Reinforcement Learning".
+This repository contains the code of our paper titled "Scalable Multi-Robot Informative Path Planning for Target Mapping via Deep Reinforcement Learning".
 Our paper can be found [here](https://arxiv.org/pdf/2409.16967).
 
 This codebase builds upon the author's previous works titled "CAtNIPP: Context-aware attention-based network for informative path planning" by Cao et al. published in the Proceedings of the Conference on Robot Learning (CoRL, 2023), and "Deep Reinforcement Learning with Dynamic Graphs for Adaptive Informative Path Planning" by Vashisth et al. published in the IEEE Robotics and Automation Letters (RAL, 2024). 
